@@ -1,0 +1,89 @@
+{
+  "meloxicam": [
+    "metacam", "melosus", "meloxidyl", "meloxoral", "meloxidolor", "meloxym", "meloxitabs", "loxicom", "rheumocam"
+  ],
+  "amoxicilline": [
+    "amoxypen", "betamox", "amoxival", "clamoxyl", "synulox", "clavaseptin"
+  ],
+  "marbofloxacine": [
+    "marbocyl", "forcyl"
+  ],
+  "pradofloxacine": [
+    "veraflox"
+  ],
+  "metronidazole": [
+    "metrobactin", "stomorgyl"
+  ],
+  "doxycycline": [
+    "ronaxan", "doxyprex", "vibravet"
+  ],
+  "prednisolone": [
+    "prednisolone", "dermipred"
+  ],
+  "dexamethasone": [
+    "dexafort", "dexadreson", "rapidexon"
+  ],
+  "oclacitinib": [
+    "apoquel"
+  ],
+  "lokivetmab": [
+    "cytopoint"
+  ],
+  "maropitant": [
+    "cerenia"
+  ],
+  "furosemide": [
+    "dimazon", "furosemide"
+  ],
+  "enalapril": [
+    "enacard", "prilium"
+  ],
+  "pimobendan": [
+    "vetmedin"
+  ],
+  "gabapentine": [
+    "gabapentine"
+  ],
+  "tramadol": [
+    "tramadol"
+  ],
+  "butorphanol": [
+    "torbugesic", "dolorex"
+  ],
+  "medetomidine": [
+    "domitor", "sedastart", "medetor"
+  ],
+  "acepromazine": [
+    "calmivet", "vetranquil"
+  ],
+  "ketamine": [
+    "imalgene", "narketan", "imalgen"
+  ],
+  "propofol": [
+    "propovet", "rapinovet"
+  ],
+  "isoflurane": [
+    "isoflo", "isovet", "isoflurane"
+  ],
+  "fipronil": [
+    "frontline", "effipro", "fiprospot"
+  ],
+  "selamectine": [
+    "stronghold"
+  ],
+  "imidaclopride": [
+    "advantage", "seresto"
+  ],
+  "moxidectine": [
+    "advocate", "proheart", "cydectin"
+  ],
+  "milbemycine": [
+    "milbemax", "interceptor"
+  ],
+  "praziquantel": [
+    "droncit", "milbemax", "drontal"
+  ],
+  "fenbendazole": [
+    "panacur", "fenbendazole"
+  ]
+}

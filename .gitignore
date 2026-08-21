@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+.env
+
+# App data (local DB & user imports — never commit)
+/data/
+*.db
+*.db-journal
+
+# Tarifs Centravet (trop volumineux)
+tarifs/
+*.csv
+
+# Packaging / build
+build/
+dist/
+*.spec
+installer/output/
+*.exe
+*.dmg
+*.app/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+*.swp
+.cursor/
+
+# Update temp
+.update_tmp/
+*.zip
