@@ -20,6 +20,7 @@ from app.config import (
     APP_ROOT,
     GITHUB_API,
     GITHUB_REPO,
+    GITHUB_TOKEN,
     UPDATE_PRESERVE,
     UPDATE_TIMEOUT,
     get_local_version,
@@ -53,15 +54,20 @@ def version_is_newer(remote: str, local: str) -> bool:
     return _parse_version(remote) > _parse_version(local)
 
 
+def _auth_headers() -> dict:
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": f"VetoPrix/{get_local_version()}",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    token = (GITHUB_TOKEN or os.environ.get("VETOPRIX_GITHUB_TOKEN") or "").strip()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
 def _http_json(url: str) -> dict:
-    req = urllib.request.Request(
-        url,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "User-Agent": f"VetoPrix/{get_local_version()}",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
-    )
+    req = urllib.request.Request(url, headers=_auth_headers())
     with urllib.request.urlopen(req, timeout=UPDATE_TIMEOUT) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
@@ -132,13 +138,7 @@ def check_for_update(repo: Optional[str] = None) -> dict:
 
 def download_zip(url: str, dest: Path) -> Path:
     dest.parent.mkdir(parents=True, exist_ok=True)
-    req = urllib.request.Request(
-        url,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "User-Agent": f"VetoPrix/{get_local_version()}",
-        },
-    )
+    req = urllib.request.Request(url, headers=_auth_headers())
     with urllib.request.urlopen(req, timeout=120) as resp, open(dest, "wb") as f:
         shutil.copyfileobj(resp, f)
     return dest

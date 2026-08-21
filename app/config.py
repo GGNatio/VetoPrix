@@ -11,9 +11,11 @@ APP_ROOT = Path(__file__).resolve().parent.parent
 VERSION_FILE = APP_ROOT / "VERSION"
 
 # Dépôt GitHub utilisé pour les mises à jour (owner/repo)
-# Sera renseigné automatiquement après création du repo, ou à la main.
 GITHUB_REPO = "GGNatio/VetoPrix"
 
+# Token optionnel si le dépôt est privé.
+# Préférer la variable d'environnement : VETOPRIX_GITHUB_TOKEN
+GITHUB_TOKEN = ""
 
 # API GitHub (releases)
 GITHUB_API = "https://api.github.com"
