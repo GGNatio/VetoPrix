@@ -49,6 +49,10 @@ VetoPrix/
 
 La base `data/vetoprix.db` n’est **jamais** écrasée.
 
+> **Important** : si le dépôt est **privé**, l’API GitHub renvoie 404 sans token.
+> - Soit tu passes le repo en **public** (le plus simple pour la MAJ),
+> - Soit tu définis la variable d’environnement `VETOPRIX_GITHUB_TOKEN` (PAT en lecture).
+
 ## Packaging Windows (.exe)
 
 Voir [docs/PACKAGING.md](docs/PACKAGING.md).
