@@ -68,6 +68,8 @@ class MainWindow(QMainWindow):
         self._apply_style()
         self.showMaximized()
         self._auto_sync_anmv()
+        # Vérif MAJ au démarrage (non bloquante, non forcée)
+        self._check_update(silent=True)
 
     def _auto_sync_anmv(self):
         """Lance la sync ANMV en arrière-plan si les données ne sont pas à jour."""
@@ -126,7 +128,7 @@ class MainWindow(QMainWindow):
             "Si oui, télécharge la mise à jour, ferme l'app, remplace les fichiers\n"
             "puis relance automatiquement (la base data/ est conservée)."
         )
-        self.btn_update.clicked.connect(self._check_update)
+        self.btn_update.clicked.connect(lambda: self._check_update(silent=False))
         header_layout.addWidget(self.btn_update)
 
         self.btn_import = QPushButton("Importer un tarif CSV")
@@ -160,57 +162,74 @@ class MainWindow(QMainWindow):
         self.setStatusBar(self.status)
         self.status.showMessage("Prêt — Importez un fichier CSV Centravet pour commencer.")
 
-    def _check_update(self):
+    def _check_update(self, silent: bool = False):
+        self._update_silent = silent
         self.btn_update.setEnabled(False)
-        self.status.showMessage("Vérification des mises à jour sur GitHub…")
+        if not silent:
+            self.status.showMessage("Vérification des mises à jour sur GitHub…")
         self._update_worker = UpdateCheckWorker()
         self._update_worker.finished.connect(self._on_update_check_done)
         self._update_worker.start()
 
     def _on_update_check_done(self, result: dict):
         self.btn_update.setEnabled(True)
+        silent = getattr(self, "_update_silent", False)
+
         if result.get("error"):
             self.status.showMessage("Échec de la vérification de mise à jour.")
-            QMessageBox.warning(
-                self, "Mise à jour",
-                f"Impossible de vérifier les mises à jour :\n{result['error']}"
-            )
+            if not silent:
+                QMessageBox.warning(
+                    self, "Mise à jour",
+                    f"Impossible de vérifier les mises à jour :\n{result['error']}"
+                )
             return
 
         local = result["local"]
         remote = result["remote"]
+
+        # À jour
         if not result["available"]:
-            self.status.showMessage(f"VetoPrix est à jour (v{local}).")
-            QMessageBox.information(
-                self, "Mise à jour",
-                f"Vous avez déjà la dernière version.\n\nVersion installée : v{local}"
-                + (f"\nDernière release GitHub : v{remote}" if remote else "")
-            )
+            msg = f"VetoPrix est à jour (v{local})."
+            self.status.showMessage(msg)
+            self.btn_update.setText(f"MAJ (v{local})")
+            if not silent:
+                QMessageBox.information(
+                    self, "Mise à jour",
+                    f"Le logiciel est à jour.\n\nVersion installée : v{local}"
+                    + (f"\nDernière release GitHub : v{remote}" if remote else "")
+                )
             return
 
+        # Nouvelle version disponible — proposer, ne jamais forcer
         release = result["release"]
+        self.btn_update.setText(f"MAJ dispo (v{remote})")
+        self.status.showMessage(f"Nouvelle version disponible : v{remote} (actuelle v{local})")
+
         notes = (release.body or "").strip()
         if len(notes) > 600:
             notes = notes[:600] + "…"
         msg = (
-            f"Une nouvelle version est disponible !\n\n"
+            f"Une nouvelle version est disponible.\n\n"
             f"Actuelle : v{local}\n"
             f"Nouvelle : v{remote}\n\n"
         )
         if notes:
             msg += f"Notes :\n{notes}\n\n"
         msg += (
-            "L'application va se fermer, se mettre à jour, puis se relancer.\n"
-            "Vos données (base SQLite dans data/) seront conservées.\n\n"
-            "Continuer ?"
+            "Souhaitez-vous mettre à jour maintenant ?\n"
+            "(L'app se fermera, se mettra à jour, puis se relancera.\n"
+            "Vos données dans data/ seront conservées.)\n\n"
+            "Vous pouvez aussi refuser et continuer à utiliser cette version."
         )
         reply = QMessageBox.question(
-            self, "Installer la mise à jour", msg,
+            self, "Mise à jour disponible", msg,
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.Yes,
+            QMessageBox.StandardButton.No,  # Ne pas forcer : Non par défaut
         )
         if reply != QMessageBox.StandardButton.Yes:
-            self.status.showMessage("Mise à jour annulée.")
+            self.status.showMessage(
+                f"Mise à jour reportée — v{remote} disponible (vous êtes en v{local})."
+            )
             return
 
         self.btn_update.setEnabled(False)

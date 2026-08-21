@@ -54,13 +54,30 @@ def version_is_newer(remote: str, local: str) -> bool:
     return _parse_version(remote) > _parse_version(local)
 
 
+def _resolve_token() -> str:
+    token = (GITHUB_TOKEN or os.environ.get("VETOPRIX_GITHUB_TOKEN") or "").strip()
+    if token:
+        return token
+    # Repli développeur : CLI gh déjà connectée (ne sert pas aux utilisateurs finaux)
+    try:
+        proc = subprocess.run(
+            ["gh", "auth", "token"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            return proc.stdout.strip()
+    except Exception:
+        pass
+    return ""
+
+
 def _auth_headers() -> dict:
     headers = {
         "Accept": "application/vnd.github+json",
         "User-Agent": f"VetoPrix/{get_local_version()}",
         "X-GitHub-Api-Version": "2022-11-28",
     }
-    token = (GITHUB_TOKEN or os.environ.get("VETOPRIX_GITHUB_TOKEN") or "").strip()
+    token = _resolve_token()
     if token:
         headers["Authorization"] = f"Bearer {token}"
     return headers
@@ -88,7 +105,10 @@ def fetch_latest_release(repo: Optional[str] = None) -> Optional[ReleaseInfo]:
         data = _http_json(url)
     except urllib.error.HTTPError as e:
         if e.code == 404:
-            return None
+            raise ValueError(
+                "Release introuvable (404). Si le dépôt est privé, "
+                "passe-le en public ou définis VETOPRIX_GITHUB_TOKEN."
+            ) from e
         raise
     tag = data.get("tag_name") or ""
     version = tag.lstrip("vV")
