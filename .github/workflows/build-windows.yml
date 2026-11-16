@@ -1,0 +1,65 @@
+name: Build Windows release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag de release existant (ex: v0.2.0) — laisse vide pour build seul"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Build with PyInstaller
+        run: python -m PyInstaller --noconfirm vetoprix.spec
+
+      - name: Copy VERSION + tarifs next to exe
+        shell: pwsh
+        run: |
+          Copy-Item VERSION dist\VetoPrix\VERSION -Force
+          if (Test-Path tarifs) {
+            New-Item -ItemType Directory -Force -Path dist\VetoPrix\tarifs | Out-Null
+            Copy-Item tarifs\* dist\VetoPrix\tarifs\ -Recurse -Force
+          }
+
+      - name: Zip portable app
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist\VetoPrix\* -DestinationPath VetoPrix-windows.zip -Force
+          Get-Item VetoPrix-windows.zip | Format-List Name, Length
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VetoPrix-windows
+          path: VetoPrix-windows.zip
+
+      - name: Attach zip to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: VetoPrix-windows.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

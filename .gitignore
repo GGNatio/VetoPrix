@@ -14,14 +14,13 @@ env/
 *.db
 *.db-journal
 
-# Tarifs Centravet (trop volumineux)
-tarifs/
-*.csv
+# CSV hors dossier tarifs/ (gros fichiers locaux à la racine)
+/*.csv
+/centravet*.csv
 
 # Packaging / build
 build/
 dist/
-*.spec
 installer/output/
 *.exe
 *.dmg
@@ -37,3 +36,4 @@ installer/output/
 # Update temp
 .update_tmp/
 *.zip
+!tarifs/

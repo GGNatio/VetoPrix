@@ -9,22 +9,32 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
 from app.config import (
     APP_ROOT,
+    ASSET_MACOS_ZIP,
+    ASSET_WINDOWS_ZIP,
     GITHUB_API,
     GITHUB_REPO,
     GITHUB_TOKEN,
     UPDATE_PRESERVE,
     UPDATE_TIMEOUT,
+    get_install_dir,
     get_local_version,
+    is_frozen,
 )
+
+
+@dataclass
+class ReleaseAsset:
+    name: str
+    browser_download_url: str
+    size: int = 0
 
 
 @dataclass
@@ -35,10 +45,10 @@ class ReleaseInfo:
     body: str
     zipball_url: str
     html_url: str
+    assets: list[ReleaseAsset] = field(default_factory=list)
 
 
 def _parse_version(text: str) -> tuple:
-    """'v1.2.3' ou '1.2.3' → (1, 2, 3). Segments non numériques → 0."""
     text = text.strip().lstrip("vV")
     parts = re.split(r"[^\d]+", text)
     nums = []
@@ -58,7 +68,6 @@ def _resolve_token() -> str:
     token = (GITHUB_TOKEN or os.environ.get("VETOPRIX_GITHUB_TOKEN") or "").strip()
     if token:
         return token
-    # Repli développeur : CLI gh déjà connectée (ne sert pas aux utilisateurs finaux)
     try:
         proc = subprocess.run(
             ["gh", "auth", "token"],
@@ -71,12 +80,15 @@ def _resolve_token() -> str:
     return ""
 
 
-def _auth_headers() -> dict:
+def _auth_headers(download: bool = False) -> dict:
     headers = {
-        "Accept": "application/vnd.github+json",
         "User-Agent": f"VetoPrix/{get_local_version()}",
         "X-GitHub-Api-Version": "2022-11-28",
     }
+    if download:
+        headers["Accept"] = "application/octet-stream"
+    else:
+        headers["Accept"] = "application/vnd.github+json"
     token = _resolve_token()
     if token:
         headers["Authorization"] = f"Bearer {token}"
@@ -84,21 +96,16 @@ def _auth_headers() -> dict:
 
 
 def _http_json(url: str) -> dict:
-    req = urllib.request.Request(url, headers=_auth_headers())
+    req = urllib.request.Request(url, headers=_auth_headers(False))
     with urllib.request.urlopen(req, timeout=UPDATE_TIMEOUT) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 
 def fetch_latest_release(repo: Optional[str] = None) -> Optional[ReleaseInfo]:
-    """
-    Récupère la dernière release GitHub.
-    Retourne None si aucune release / repo mal configuré.
-    """
     repo = repo or GITHUB_REPO
     if not repo or "OWNER" in repo or "/" not in repo:
         raise ValueError(
-            "Dépôt GitHub non configuré. Modifiez GITHUB_REPO dans app/config.py "
-            "(ex: 'ton-user/VetoPrix')."
+            "Dépôt GitHub non configuré. Modifiez GITHUB_REPO dans app/config.py."
         )
     url = f"{GITHUB_API}/repos/{repo}/releases/latest"
     try:
@@ -112,6 +119,15 @@ def fetch_latest_release(repo: Optional[str] = None) -> Optional[ReleaseInfo]:
         raise
     tag = data.get("tag_name") or ""
     version = tag.lstrip("vV")
+    assets = [
+        ReleaseAsset(
+            name=a.get("name") or "",
+            browser_download_url=a.get("browser_download_url") or "",
+            size=int(a.get("size") or 0),
+        )
+        for a in (data.get("assets") or [])
+        if a.get("browser_download_url")
+    ]
     return ReleaseInfo(
         tag=tag,
         version=version,
@@ -119,14 +135,42 @@ def fetch_latest_release(repo: Optional[str] = None) -> Optional[ReleaseInfo]:
         body=data.get("body") or "",
         zipball_url=data.get("zipball_url") or "",
         html_url=data.get("html_url") or "",
+        assets=assets,
     )
 
 
+def pick_download_url(release: ReleaseInfo) -> tuple[str, str]:
+    """
+    Choisit l'URL de téléchargement selon la plateforme.
+    Retourne (url, label).
+    """
+    by_name = {a.name: a for a in release.assets}
+
+    if is_frozen() and sys.platform == "win32":
+        asset = by_name.get(ASSET_WINDOWS_ZIP)
+        if asset:
+            return asset.browser_download_url, ASSET_WINDOWS_ZIP
+        raise FileNotFoundError(
+            f"Asset {ASSET_WINDOWS_ZIP} absent de la release {release.tag}. "
+            "Attendez la fin du build GitHub Actions ou joignez le zip à la release."
+        )
+
+    if is_frozen() and sys.platform == "darwin":
+        asset = by_name.get(ASSET_MACOS_ZIP)
+        if asset:
+            return asset.browser_download_url, ASSET_MACOS_ZIP
+        # Repli : zipball source (dev)
+        if release.zipball_url:
+            return release.zipball_url, "source-zipball"
+        raise FileNotFoundError(f"Asset {ASSET_MACOS_ZIP} absent de la release.")
+
+    # Mode source Python
+    if release.zipball_url:
+        return release.zipball_url, "source-zipball"
+    raise FileNotFoundError("Aucun fichier de mise à jour disponible sur la release.")
+
+
 def check_for_update(repo: Optional[str] = None) -> dict:
-    """
-    Compare la version locale à la dernière release.
-    Retourne un dict : available, local, remote, release (ReleaseInfo|None), error
-    """
     local = get_local_version()
     try:
         release = fetch_latest_release(repo)
@@ -156,59 +200,74 @@ def check_for_update(repo: Optional[str] = None) -> dict:
     }
 
 
-def download_zip(url: str, dest: Path) -> Path:
+def download_file(url: str, dest: Path) -> Path:
     dest.parent.mkdir(parents=True, exist_ok=True)
-    req = urllib.request.Request(url, headers=_auth_headers())
-    with urllib.request.urlopen(req, timeout=120) as resp, open(dest, "wb") as f:
+    # browser_download_url n'a pas besoin de Accept octet-stream
+    headers = _auth_headers(False)
+    headers["Accept"] = "application/octet-stream"
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=300) as resp, open(dest, "wb") as f:
         shutil.copyfileobj(resp, f)
     return dest
 
 
 def start_update_and_quit(release: ReleaseInfo) -> None:
     """
-    Télécharge le zip de la release, lance update_helper.py, quitte l'app.
-    La base data/ est préservée par le helper.
+    Télécharge le bon asset (Windows zip embarqué ou sources),
+    lance le helper de MAJ, quitte l'app. data/ est préservée.
     """
     tmp_dir = APP_ROOT / ".update_tmp"
     if tmp_dir.exists():
         shutil.rmtree(tmp_dir, ignore_errors=True)
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
-    zip_path = tmp_dir / f"vetoprix_{release.version}.zip"
-    download_zip(release.zipball_url, zip_path)
+    url, label = pick_download_url(release)
+    zip_path = tmp_dir / f"vetoprix_{release.version}_{label.replace('/', '_')}.zip"
+    download_file(url, zip_path)
 
-    helper = APP_ROOT / "update_helper.py"
-    if not helper.exists():
-        raise FileNotFoundError(f"Helper de mise à jour introuvable : {helper}")
+    install_dir = get_install_dir()
 
-    # Relance : même interpréteur + main.py
-    restart_cmd = [sys.executable, str(APP_ROOT / "main.py")]
+    if is_frozen():
+        restart_cmd = [sys.executable]
+        args = [
+            sys.executable,
+            "--update-helper",
+            "--pid", str(os.getpid()),
+            "--zip", str(zip_path),
+            "--install-dir", str(install_dir),
+            "--preserve", *UPDATE_PRESERVE,
+            "--restart", *restart_cmd,
+        ]
+    else:
+        helper = APP_ROOT / "update_helper.py"
+        if not helper.exists():
+            helper = Path(__file__).resolve().parents[2] / "update_helper.py"
+        if not helper.exists():
+            raise FileNotFoundError(f"Helper de mise à jour introuvable : {helper}")
+        restart_cmd = [sys.executable, str(APP_ROOT / "main.py")]
+        args = [
+            sys.executable,
+            str(helper),
+            "--pid", str(os.getpid()),
+            "--zip", str(zip_path),
+            "--install-dir", str(install_dir),
+            "--preserve", *UPDATE_PRESERVE,
+            "--restart", *restart_cmd,
+        ]
 
-    args = [
-        sys.executable,
-        str(helper),
-        "--pid", str(os.getpid()),
-        "--zip", str(zip_path),
-        "--install-dir", str(APP_ROOT),
-        "--preserve", *UPDATE_PRESERVE,
-        "--restart", *restart_cmd,
-    ]
-    # Détaché pour survivre à la fermeture de l'app
     kwargs = {
-        "cwd": str(APP_ROOT),
+        "cwd": str(install_dir),
         "stdout": subprocess.DEVNULL,
         "stderr": subprocess.DEVNULL,
         "stdin": subprocess.DEVNULL,
         "start_new_session": True,
     }
     if sys.platform == "win32":
-        # CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS
         kwargs["creationflags"] = 0x00000200 | 0x00000008
         kwargs.pop("start_new_session", None)
 
     subprocess.Popen(args, **kwargs)
 
-    # Quitter l'app Qt proprement
     from PyQt6.QtWidgets import QApplication
     app = QApplication.instance()
     if app is not None:

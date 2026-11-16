@@ -2,57 +2,48 @@
 
 Comparateur de prix de médicaments vétérinaires (tarifs Centravet + catalogue ANMV).
 
-## Prérequis
+## Pour l’accueil (Windows) — sans Python
 
-- Python 3.9+
-- Dépendances : `pip install -r requirements.txt`
+1. Télécharger **`VetoPrix-windows.zip`** sur  
+   https://github.com/GGNatio/VetoPrix/releases
+2. Dézipper → lancer `VetoPrix.exe`
+3. Les mises à jour (nouvel exe + nouveaux tarifs) se proposent au démarrage
 
-## Lancer
+Guide complet : [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md)
+
+## Publier un nouveau tarif (toi)
 
 ```bash
-cd VetoPrix
-python3 main.py
+cp /chemin/centravet_tarif_YYYYMMDD_….csv tarifs/
+echo "0.2.1" > VERSION          # incrémenter
+git add tarifs VERSION && git commit -m "Tarif mois…" && git push
+git tag v0.2.1 && git push origin v0.2.1
 ```
+
+→ GitHub Actions fabrique le zip Windows et l’attache à la release.
+
+## Dev local (Mac / Python)
+
+```bash
+pip install -r requirements.txt
+python3 main.py
+# ou ./lancer.command
+```
+
+Build Mac embarqué : `./build_mac.sh` → `dist/VetoPrix.app`
 
 ## Fonctionnalités
 
-- Import de tarifs CSV Centravet (historique des prix, pas d’écrasement)
-- Recherche par molécule / mot-clé, comparaison €/ml
-- Sync catalogue ANMV (IRCP)
-- Statistiques d’évolution des prix
-- **Mise à jour à distance** via GitHub Releases (bouton `MAJ` dans le header)
+- Import CSV Centravet (historique, pas d’écrasement) + **auto-import** du dossier `tarifs/`
+- Recherche molécule / mot-clé, €/ml
+- Sync ANMV, statistiques
+- MAJ à distance via GitHub Releases (app Windows + tarifs)
 
-## Structure
+## Structure utile
 
 ```
-VetoPrix/
-├── main.py                 # Point d’entrée
-├── update_helper.py        # Processus de MAJ (après fermeture de l’app)
-├── VERSION                 # Version locale (ex: 0.1.0)
-├── requirements.txt
-├── app/
-│   ├── config.py           # Config centralisée (repo GitHub, chemins…)
-│   ├── update/             # Vérif + téléchargement des releases
-│   ├── database/           # SQLite
-│   ├── data/               # Import CSV, recherche, ANMV, mapping
-│   └── ui/                 # Interface PyQt6
-└── data/                   # DB locale (non versionnée) — préservée aux MAJ
+VERSION                 # version locale (doit matcher le tag GitHub)
+tarifs/                 # CSV livrés aux PC via les releases
+.github/workflows/      # build Windows automatique
+app/update/             # vérif + téléchargement releases
 ```
-
-## Mise à jour (dev)
-
-1. Modifier le code
-2. Incrémenter `VERSION` (ex: `0.1.0` → `0.1.1`)
-3. Commit + push sur `main`
-4. Créer une **GitHub Release** taguée `v0.1.1` (le tag doit correspondre à VERSION)
-5. Les utilisateurs cliquent **MAJ** dans l’app
-
-La base `data/vetoprix.db` n’est **jamais** écrasée.
-
-> **Important** : si le dépôt est **privé**, l’API GitHub renvoie 404 sans token.
-> - Soit tu passes le repo en **public** (le plus simple pour la MAJ),
-> - Soit tu définis la variable d’environnement `VETOPRIX_GITHUB_TOKEN` (PAT en lecture).
-
-## Packaging Windows (.exe)
-
-Voir [docs/PACKAGING.md](docs/PACKAGING.md).

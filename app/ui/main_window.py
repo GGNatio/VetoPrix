@@ -18,6 +18,7 @@ from app.data.online_discovery import scrape_anmv, get_last_scrape_date
 from app.ui.search_tab import SearchTab
 from app.ui.stats_tab import StatsTab
 from app.config import get_local_version
+from app.data.tarif_auto_import import auto_import_tarifs
 from app.update import check_for_update, start_update_and_quit
 
 
@@ -67,9 +68,32 @@ class MainWindow(QMainWindow):
         self._setup_ui()
         self._apply_style()
         self.showMaximized()
+        self._auto_import_tarifs()
         self._auto_sync_anmv()
         # Vérif MAJ au démarrage (non bloquante, non forcée)
         self._check_update(silent=True)
+
+    def _auto_import_tarifs(self):
+        """Importe les CSV présents dans tarifs/ (nouveaux fichiers uniquement)."""
+        try:
+            result = auto_import_tarifs()
+        except Exception as e:
+            if hasattr(self, "status"):
+                self.status.showMessage(f"Import tarifs : erreur ({e})")
+            return
+        imported = result.get("imported") or []
+        if not imported:
+            return
+        total = sum(i.get("nb_produits") or 0 for i in imported)
+        names = ", ".join(i["file"] for i in imported[:3])
+        if len(imported) > 3:
+            names += f" (+{len(imported) - 3})"
+        if hasattr(self, "status"):
+            self.status.showMessage(
+                f"Tarifs importés automatiquement : {names} — {total} produits."
+            )
+        self.search_tab.refresh()
+        self.stats_tab.refresh()
 
     def _auto_sync_anmv(self):
         """Lance la sync ANMV en arrière-plan si les données ne sont pas à jour."""
